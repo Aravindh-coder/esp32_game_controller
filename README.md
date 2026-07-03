@@ -1,42 +1,68 @@
-# ESP32 Game Controller
+# 🎮 ESP32 BLE Racing Controller
 
-A Bluetooth game controller built with an ESP32, MPU6050 motion sensor, and flex sensors for brake and acceleration input.
+A motion-sensing, pedal-equipped Bluetooth gamepad — built from scratch on an ESP32. Tilt to steer, squeeze flex sensors to brake and accelerate. No dongle, no wires (once flashed) — it shows up as a native Bluetooth HID gamepad on any Linux, Windows, or Android device.
+
+▶️ **[Watch the demo video](./esp_output_video.mp4)**
+
+## Overview
+
+This project turns an ESP32 + MPU6050 + flex sensors into a fully wireless racing controller that any BLE-HID-compatible system recognizes out of the box — verified working in [SuperTuxKart](https://supertuxkart.net/), the Linux `jstest` joystick tool, and the browser Gamepad API (`hardwaretester.com/gamepad`).
 
 ## Features
-- Bluetooth gamepad output using the ESP32
-- MPU6050-based motion input for steering
-- Flex sensors for brake and acceleration
-- Vibration motor feedback
-- PlatformIO project structure
+- **Native Bluetooth HID gamepad** — no bridge software, no drivers, no companion app. The ESP32 advertises itself directly as a BLE gamepad using `ESP32-BLE-Gamepad` + NimBLE.
+- **Motion-based steering** — MPU6050 accelerometer/gyroscope tilt mapped to steering axis, with smoothing to reduce jitter.
+- **Analog pedals** — two flex sensors for brake and acceleration, read as continuous analog axes (not just on/off buttons).
+- **Haptic feedback** — vibration motors for in-game feedback.
+- **Cross-platform** — recognized as a standard gamepad by Linux (`jstest`, kernel `hid-generic`), browsers (Gamepad API), and any BLE HID host.
 
 ## Hardware
-- ESP32 DevKit
-- MPU6050 accelerometer/gyroscope
-- 2 flex sensors
-- 2 vibration motors
-- Breadboard and jumper wires
+| Component | Purpose |
+|---|---|
+| ESP32 DevKit | Main controller, BLE HID host |
+| MPU6050 | Accelerometer/gyroscope for tilt-steering |
+| 2x Flex sensors | Brake and acceleration input |
+| 2x Vibration motors | Haptic feedback |
+| Breadboard + jumper wires | Prototyping |
 
 ## Wiring
-- MPU6050 on I2C pins 21 (SDA) and 22 (SCL)
-- Flex sensor brake on GPIO 34
-- Flex sensor acceleration on GPIO 35
-- Vibration motors on GPIO 25 and 33
+| Signal | Pin |
+|---|---|
+| MPU6050 SDA | GPIO 21 |
+| MPU6050 SCL | GPIO 22 |
+| Flex sensor (brake) | GPIO 34 |
+| Flex sensor (accel) | GPIO 35 |
+| Vibration motor 1 | GPIO 25 |
+| Vibration motor 2 | GPIO 33 |
 
-## Software
-- PlatformIO
-- Arduino framework
-- BleGamepad library
-- MPU6050 library
+## Software Stack
+- **PlatformIO** + Arduino framework
+- [`ESP32-BLE-Gamepad`](https://github.com/lemmingDev/ESP32-BLE-Gamepad) (NimBLE-based BLE HID gamepad library)
+- `MPU6050` library for motion sensing
 
-## Build and Upload
-1. Install PlatformIO
-2. Open the project folder
-3. Run:
-   ```bash
-   pio run
-   pio run --target upload
-   ```
+## Build & Flash
+```bash
+pio run
+pio run --target upload
+```
+
+## Pairing & Testing
+1. Flash the firmware, power the ESP32 (USB or battery — both work simultaneously).
+2. Pair via Bluetooth settings, or manually:
+```bash
+   bluetoothctl
+   scan on
+   pair <ESP32_MAC_ADDRESS>
+   trust <ESP32_MAC_ADDRESS>
+   connect <ESP32_MAC_ADDRESS>
+```
+3. Verify it's recognized as a gamepad:
+```bash
+   ls /dev/input/js*
+   jstest /dev/input/jsX
+```
+   Or open `hardwaretester.com/gamepad` in a browser.
 
 ## Notes
-- The Bluetooth controller is intended for use with compatible gamepad-supported applications.
-- Calibration values may need adjustment depending on your sensor and flex sensor setup.
+- Calibration constants (tilt center/range, smoothing factor) may need adjustment for your specific MPU6050 mounting orientation and flex sensor characteristics — see the calibration section in `main.cpp`.
+- Axis mapping is currently non-standard (not auto-recognized as an Xbox-style "STANDARD GAMEPAD"), so games with manual controller remapping (e.g. SuperTuxKart) work best.
+- Built and debugged end-to-end on Ubuntu, including working around several NimBLE/PlatformIO build quirks along the way.
