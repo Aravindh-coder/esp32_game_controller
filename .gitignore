@@ -1,0 +1,10 @@
+.pio/
+build/
+.vscode/
+joystick-env/
+__pycache__/
+*.py[cod]
+*.log
+*.bin
+*.elf
+*.hex

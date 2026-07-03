@@ -1,0 +1,83 @@
+#include <Arduino.h>
+#include <Wire.h>
+#include <MPU6050.h>
+
+#define LED_PIN        2
+#define FLEX_BRAKE     34
+#define FLEX_ACCEL     35
+#define VIB_MOTOR_1    25
+#define VIB_MOTOR_2    33
+
+MPU6050 mpu;
+int16_t ax, ay, az;
+int16_t gx, gy, gz;
+
+// Calibrated from real sensor testing
+int flexBrakeMin = 340,  flexBrakeMax = 720;
+int flexAccelMin = 1150, flexAccelMax = 1410;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(LED_PIN, OUTPUT);
+  digitalWrite(LED_PIN, LOW);
+  pinMode(FLEX_BRAKE, INPUT);
+  pinMode(FLEX_ACCEL, INPUT);
+  pinMode(VIB_MOTOR_1, OUTPUT);
+  pinMode(VIB_MOTOR_2, OUTPUT);
+  digitalWrite(VIB_MOTOR_1, HIGH);
+  digitalWrite(VIB_MOTOR_2, HIGH);
+
+  Wire.begin(21, 22);
+  mpu.initialize();
+
+  if (mpu.testConnection()) {
+    Serial.println("MPU6050 connected successfully");
+    digitalWrite(LED_PIN, HIGH);
+  } else {
+    Serial.println("MPU6050 connection FAILED");
+    for (int i = 0; i < 5; i++) {
+      digitalWrite(LED_PIN, HIGH);
+      delay(150);
+      digitalWrite(LED_PIN, LOW);
+      delay(150);
+    }
+  }
+}
+
+void loop() {
+  mpu.getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+
+  int rawBrake = analogRead(FLEX_BRAKE);
+  int rawAccel = analogRead(FLEX_ACCEL);
+
+  // Sensors read HIGH at rest, LOW when bent -> map with reversed range
+  int brakeValue = map(rawBrake, flexBrakeMax, flexBrakeMin, 0, 255);
+  int accelValue = map(rawAccel, flexAccelMax, flexAccelMin, 0, 255);
+  brakeValue = constrain(brakeValue, 0, 255);
+  accelValue = constrain(accelValue, 0, 255);
+
+  if (brakeValue > 50) {
+    digitalWrite(VIB_MOTOR_1, LOW);
+  } else {
+    digitalWrite(VIB_MOTOR_1, HIGH);
+  }
+
+  if (abs(ax) > 4500 || abs(ay) > 4500) {
+    digitalWrite(VIB_MOTOR_2, LOW);
+  } else {
+    digitalWrite(VIB_MOTOR_2, HIGH);
+  }
+
+  Serial.print("Accel(ax,ay,az): ");
+  Serial.print(ax); Serial.print(", ");
+  Serial.print(ay); Serial.print(", ");
+  Serial.print(az);
+
+  Serial.print(" | Brake: ");
+  Serial.print(brakeValue);
+
+  Serial.print(" | Accel Pedal: ");
+  Serial.println(accelValue);
+
+  delay(50);
+}

@@ -1,0 +1,76 @@
+import serial
+import uinput
+import re
+import time
+
+SERIAL_PORT = "/dev/ttyUSB0"
+BAUD_RATE = 115200
+
+# Pattern matches your firmware's Serial.print output
+pattern = re.compile(
+    r"Accel\(ax,ay,az\):\s*(-?\d+),\s*(-?\d+),\s*(-?\d+)\s*\|\s*Brake:\s*(\d+)\s*\|\s*Accel Pedal:\s*(\d+)"
+)
+
+events = (
+    uinput.ABS_X + (0, 255, 0, 0),   # tilt X -> steering
+    uinput.ABS_Y + (0, 255, 0, 0),   # tilt Y -> unused / extra axis
+    uinput.ABS_RZ + (0, 255, 0, 0),  # brake
+    uinput.ABS_Z + (0, 255, 0, 0),   # accel pedal
+    uinput.BTN_JOYSTICK,
+)
+
+device = uinput.Device(events, name="ESP32 Racing Controller")
+
+print("Virtual joystick created: ESP32 Racing Controller")
+
+# Fire a dummy button event so browsers/Gamepad API recognize the device
+device.emit(uinput.BTN_JOYSTICK, 1)
+time.sleep(0.1)
+device.emit(uinput.BTN_JOYSTICK, 0)
+print(f"Opening serial port {SERIAL_PORT} at {BAUD_RATE} baud...")
+
+ser = serial.Serial(SERIAL_PORT, BAUD_RATE, timeout=1)
+time.sleep(2)
+
+# Tilt calibration - adjust these based on your MPU6050 resting/max values
+AX_CENTER, AX_RANGE = 1850, 200   # recalibrated from actual sensor readings
+AY_CENTER, AY_RANGE = 840, 200
+
+def clamp(v, lo=0, hi=255):
+    return max(lo, min(hi, v))
+
+# Smoothing state
+smooth_x, smooth_y = 127, 127
+SMOOTHING = 0.2  # lower = smoother/slower, higher = more responsive
+
+try:
+    while True:
+        line = ser.readline().decode(errors="ignore").strip()
+        if not line:
+            continue
+        m = pattern.search(line)
+        if not m:
+            continue
+
+        ax, ay, az, brake, accel = map(int, m.groups())
+
+        # Map tilt (steering) around a center point into 0-255
+        raw_x = clamp(int((ax - AX_CENTER) / AX_RANGE * 127 + 127))
+        raw_y = clamp(int((ay - AY_CENTER) / AY_RANGE * 127 + 127))
+
+        smooth_x = smooth_x + SMOOTHING * (raw_x - smooth_x)
+        smooth_y = smooth_y + SMOOTHING * (raw_y - smooth_y)
+        steer_x = clamp(int(smooth_x))
+        steer_y = clamp(int(smooth_y))
+
+        device.emit(uinput.ABS_X, steer_x, syn=False)
+        device.emit(uinput.ABS_Y, steer_y, syn=False)
+        device.emit(uinput.ABS_RZ, clamp(brake))
+        device.emit(uinput.ABS_Z, clamp(accel))
+
+        print(f"Steer_X:{steer_x} Steer_Y:{steer_y} Brake:{brake} Accel:{accel}")
+
+except KeyboardInterrupt:
+    print("\nStopped.")
+finally:
+    ser.close()
